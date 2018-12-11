@@ -1,0 +1,74 @@
+---
+title: "Post 3 - 552"
+author: "Jamie McKinnon"
+date: "December 10, 2018"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load Packages, include=FALSE}
+#install.packages("babynames")
+library(babynames)
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(tidyr)
+```
+
+# Baby Names
+The data (name, year of birth, sex, and number) are from a 100 percent sample of Social Security card applications after 1879. The SSA baby names data comes from social security number (SSN) applications. SSA cards were first issued in 1936, but were only needed for people with an income. In 1986, the law changed effectively requiring all children to get an SSN at birth. Full baby name data provided by the SSA. This includes all names with at least 5 uses. The data was created into a CRAN package. I use the package babynames and the data babynames to complete the following analysis.
+
+```{r Read Data}
+babynames <- babynames::babynames
+#babynames::applicants
+#babynames::births
+#babynames::lifetables
+head(babynames)
+str(babynames)
+```
+
+
+```{r Number of Names and Population}
+babynames %>% 
+  group_by(year, sex) %>% 
+  summarize(number_unq_names = n()) %>%
+  ggplot(aes(year, number_unq_names, col=sex)) + 
+    geom_point() +
+    geom_line()
+
+babynames::applicants %>% 
+  ggplot(aes(year, n_all, col=sex)) + 
+    geom_point() + 
+    geom_line()
+```
+
+```{r Filtering by Sex}
+boynames <- babynames[which(babynames$sex == "M"),]
+girlnames <- babynames[which(babynames$sex == "F"),]
+```
+
+
+```{r Plots of Top Name By Year}
+boynames %>% 
+  group_by(year) %>% 
+  top_n(1, n) %>%
+  ggplot(aes(year, n, label=name, color=name)) +
+    geom_point() + geom_text()
+
+girlnames %>% 
+  group_by(year) %>% 
+  top_n(1, n) %>%
+  ggplot(aes(year, n, label=name, color=name)) +
+    geom_point() + geom_text()
+```
+
+
+
+```{r}
+data(iris)
+head(iris)
+
+```
