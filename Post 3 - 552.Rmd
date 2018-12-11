@@ -1,7 +1,7 @@
 ---
 title: "Post 3 - 552"
 author: "Jamie McKinnon"
-date: "December 10, 2018"
+date: "December 1, 2018"
 output: github_document
 ---
 
@@ -16,10 +16,28 @@ library(tidyverse)
 library(dplyr)
 library(stringr)
 library(tidyr)
+
+#install.packages("ggmap")
+library(ggmap)
+#install.packages("rgdal")
+library(rgdal)
+#install.packages("rgeos")
+library(rgeos)
+#install.packages("maptools")
+library(maptools)
+#install.packages("tmap")
+library(tmap)
+library(maps)
+library(ggplot2)
+
+#install.packages("anomalyDetection")
+library(anomalyDetection)
+library(reshape2)
+
 ```
 
 # Baby Names
-The data (name, year of birth, sex, and number) are from a 100 percent sample of Social Security card applications after 1879. The SSA baby names data comes from social security number (SSN) applications. SSA cards were first issued in 1936, but were only needed for people with an income. In 1986, the law changed effectively requiring all children to get an SSN at birth. Full baby name data provided by the SSA. This includes all names with at least 5 uses. The data was created into a CRAN package. I use the package babynames and the data babynames to complete the following analysis.
+The data (name, year of birth, sex, and number) are from a 100 percent sample of Social Security card applications after 1879. The Social Security Administration, SSA,  baby names data comes from social security number (SSN) applications. SSA cards were first issued in 1936, but were only needed for people with an income. In 1986, the law changed effectively requiring all children to get an SSN at birth. Full baby name data provided by the SSA. This includes all names with at least 5 uses. The data was created into a CRAN package. I use the package babynames and the data babynames to complete the following analysis.
 
 ```{r Read Data}
 babynames <- babynames::babynames
@@ -30,8 +48,10 @@ head(babynames)
 str(babynames)
 ```
 
+# Number of Unique Names Over Time
+To get a sense of the number of unique names used over time, we plot it using ggplot and dplyr. First we group the original dataset by year, and sex, then summarize by counting the number of rows left after grouping. This is the same as checking unique(names) for each group. The first plot shows the number of unique names over time reported to the SSA. The slight peak around year 1920 is very interesting and seems to correspond to the second plot where there was an increase in the number of births around the same time. There is a gradual increase over time of unique baby names with no other corresponding spikes to the population plot in plot two. I would have assumed there may be a similar spike around year 1960 as we see around year 1920 due to the increase in births during that time.
 
-```{r Number of Names and Population}
+```{r Number of Names}
 babynames %>% 
   group_by(year, sex) %>% 
   summarize(number_unq_names = n()) %>%
@@ -43,32 +63,163 @@ babynames::applicants %>%
   ggplot(aes(year, n_all, col=sex)) + 
     geom_point() + 
     geom_line()
+
 ```
+
+# Separate Datasets For Male and Female Sex
+Here we filter the original babynames data using a which statement to create two data subsets separated by sex.
 
 ```{r Filtering by Sex}
 boynames <- babynames[which(babynames$sex == "M"),]
 girlnames <- babynames[which(babynames$sex == "F"),]
 ```
 
+# Top Name By Year For Each Sex
+To see the top boy and girl names by year we can use the previous dataset along with dplyr and ggplot to plot these over time. This shows interesting trends in how a name will stay popular for several years before switching to a new "popular" name. There is one unique point in the male plot at year 1960 where David becomes popular and then never shows up again. The plot for female data shows that Mary carried popularity for a lot longer than any of the male name, but there were a few years where Linda became very popular, where the count rose to 100,000 cases at year 1952. 
 
 ```{r Plots of Top Name By Year}
 boynames %>% 
   group_by(year) %>% 
   top_n(1, n) %>%
   ggplot(aes(year, n, label=name, color=name)) +
-    geom_point() + geom_text()
+    geom_point() + 
+    geom_text() +
+    labs(title="Most Frequent Boy Names By Year")
 
 girlnames %>% 
   group_by(year) %>% 
   top_n(1, n) %>%
   ggplot(aes(year, n, label=name, color=name)) +
-    geom_point() + geom_text()
+    geom_point() + 
+    geom_text() +
+    labs(title="Most Frequent Girl Names By Year")
 ```
 
 
+# State Specific Data
+State-specific data was downloaded from https://www.ssa.gov/oact/babynames/limits.html as a .csv titled BabyNamesState_babyNamesUs. This information provided us with year over year summaries of the number of children registered with the Social Security Administration by US State. These data allowed me to plot the most popular baby names by state in the following sections.
 
-```{r}
-data(iris)
-head(iris)
+States latitude and longitude based on their abbreviation was downloaded from https://www.kaggle.com/washimahmed/usa-latlong-for-state-abbreviations/version/1 as a .csv titled statelatlong. This information is used to later join our state data of babynames so we have the latitude and longitude to plot.
+
+```{r State Specific Data Load}
+babynames_state <- read.csv("C:/Users/jamie/Documents/BZAN/BZAN-552--Final-Portfolio-3/BabyNamesState_babyNamesUS.csv", header = T)
+
+statelatlong <- read.csv("C:/Users/jamie/Documents/BZAN/BZAN-552--Final-Portfolio-3/statelatlong.csv")
+
+babynames_state %>%
+  group_by(StateCode, Name, Sex) %>%
+  summarize(Number = sum(Number)) -> babynames_state_summary
+
+all_states <- map_data("state")
 
 ```
+
+# Spacial Data Plot - Most Frequent Boy Names by State
+The spacial data plots were created for both boy and girl names by State. A little column manipulation was necessary to left join columns then again to change the name of the Latitude and Longitude columns from the states latitude and longitude dataset read from Kaggle above. 
+
+An interesting find here is the segregation of most frequent names by region of the US.
+
+```{r Most Frequent Boy Names By State}
+##---------------##
+## Most Frequent ##
+##---------------##
+babynames_state_summary %>%
+  filter(Sex == "M") %>%
+  group_by(StateCode) %>%
+  summarize(Name = Name[which(Number == max(Number))],
+            Number = max(Number)) -> Most_Freq_Name_State_M
+
+colnames(Most_Freq_Name_State_M) <- c("State","Name", "Number")
+
+Most_Freq_Name_State_latlong <- left_join(Most_Freq_Name_State_M, statelatlong, by = "State")
+colnames(Most_Freq_Name_State_latlong) <- c("state", "name", "number", "lat", "long", "city")
+
+ggplot()+
+  geom_polygon( data=all_states, aes(x=long, y=lat, group = group),colour="white", fill="grey50" )+ 
+  geom_text( data=Most_Freq_Name_State_latlong, hjust=0.5, vjust=-0.5, aes(x=long, y=lat, label=name, color = name), size=2 ) +
+  labs(title="Most Frequent Boy Names By State")
+
+```
+
+# Spacial Data Plot - Most Frequent Girl Names by State
+As above, there was a little manipulation required to get the data joined to be able to plot the most frequent girl names by state. The most frequent girl names varied less in total and regionally over the US. There were only two names used over all states. Mary seems to be the most popular for most states except for Jennifer which is most popular in California and Nevada. This reinforces the findings from above about names separated by region.
+
+```{r Most Frequent Girl Names By State}
+babynames_state_summary %>%
+  filter(Sex == "F") %>%
+  group_by(StateCode) %>%
+  summarize(Name = Name[which(Number == max(Number))],
+            Number = max(Number)) -> Most_Freq_Name_State_F
+
+colnames(Most_Freq_Name_State_F) <- c("State","Name", "Number")
+
+Most_Freq_Name_State_latlong <- left_join(Most_Freq_Name_State_F, statelatlong, by = "State")
+colnames(Most_Freq_Name_State_latlong) <- c("state", "name", "number", "lat", "long", "city")
+
+all_states <- map_data("state")
+
+ggplot()+
+  geom_polygon( data=all_states, aes(x=long, y=lat, group = group),colour="white", fill="grey50" )+ 
+  geom_text( data=Most_Freq_Name_State_latlong, hjust=0.5, vjust=-0.5, aes(x=long, y=lat, label=name, color = name) , size=2 ) +
+  labs(title="Most Frequent Girl Names By State")
+
+```
+
+# Proportion of Baby Names
+To visually estimate outliers based on name proportions, we can plot the porportions of baby names by index. There are only 156 unique baby names where the proportions are greater than 0.01 and fewer as the proportions increase. At the top where proportions are greater than 0.07, there are only three baby names that fit in that category. Proportions are a measure of the amount of babies named that name for that specific year. 
+
+Outliers in this set would likely be those with high proportions since a majority, 95,025 entries, have proportions less than 0.00001.
+
+The last plot in this section shows a plot of the proportions by year and colored by sex. We see here, that the proportion of people using the same name are steadily decreasing over time for both males and females. It seems like people are trying to be more creative and unique, and we have easier ways of finding information via the internet. 
+
+```{r Proportion of Baby Names}
+plot(babynames$prop)
+unique(babynames$name[which(babynames$prop > 0.07)])
+unique(babynames$name[which(babynames$prop > 0.06)])
+unique(babynames$name[which(babynames$prop > 0.05)])
+unique(babynames$name[which(babynames$prop > 0.04)])
+unique(babynames$name[which(babynames$prop > 0.03)])
+unique(babynames$name[which(babynames$prop > 0.02)])
+unique(babynames$name[which(babynames$prop > 0.01)])
+length(unique(babynames$name[which(babynames$prop < 0.01)]))
+
+length(unique(babynames$name[which(babynames$prop < 0.00001)])) # 95,025 entries with very low proportions
+
+babynames %>% 
+  ggplot(aes(x = year, y = prop, col=sex)) + 
+    geom_point() + 
+    geom_line()
+```
+
+# Anomaly Detection
+Finally, I conduct an anomaly detection technique using hte package anomalyDetction. The data must first be put into a matrix format. Because of the size of the data and the small amount of RAM I'm working with on my computer, I filter the data to only include proportions greater than 0.01. 
+
+I calculate the mahalanobis distance for each name over time. From this we can use a simple which statement to determine the most outlying name, which happens to be "Sophia". 
+
+```{r Anomaly Detection}
+babynames %>%
+  select(name, year, prop) %>%
+  group_by(name, year) %>%
+  filter(prop > 0.01) %>%
+  spread(name, prop) %>%
+  as.matrix() -> babynames_matrix
+
+rownames(babynames_matrix) <- babynames_matrix[,1]
+
+babynames_matrix <- babynames_matrix[,-1]
+
+babynames_matrix[is.na(babynames_matrix)] = 0
+
+nrow(babynames_matrix)
+ncol(babynames_matrix)
+
+# Calculates the distance between the elements in a data set and the mean vector of the data for outlier detection. 
+# This calculates the outlier score for each name
+md_name <- anomalyDetection::mahalanobis_distance(t(babynames_matrix))
+
+names <- rownames(t(babynames_matrix))
+names[which(md_name == max(md_name))]
+```
+
+
+This post uses code and techniques from modules: 2, 4, 5, and 22
